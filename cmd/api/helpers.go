@@ -20,11 +20,12 @@ func (app *application) readIDParam(r *http.Request) (int, error) {
 	return id, nil
 }
 
-// writeJSON() helper for sending responses. This takes the destination
-// http.ResponseWriter, the HTTP status code to send, the data to encode to JSON, and a
-// headers map containing any additional HTTP headers we want to include in the response.
-func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
-	js, err := json.Marshal(data)
+// Define an envelope type.
+type envelope map[string]any
+
+// Change the data parameter to have the type envelope instead of any.
+func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+	js, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		return err
 	}
