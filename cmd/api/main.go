@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/DimaMaimesko/greenlight/internal/data"
 	_ "github.com/lib/pq"
 )
 
@@ -26,9 +27,11 @@ type config struct {
 	}
 }
 
+// Add a models field to hold our new Models struct.
 type application struct {
 	config config
 	logger *slog.Logger
+	models data.Models
 }
 
 func main() {
@@ -59,9 +62,12 @@ func main() {
 
 	logger.Info("database connection pool established")
 
+	// Use the data.NewModels() function to initialize a Models struct, passing in the
+	// connection pool as a parameter.
 	app := &application{
 		config: cfg,
 		logger: logger,
+		models: data.NewModels(db),
 	}
 
 	srv := &http.Server{
