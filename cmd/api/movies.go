@@ -23,7 +23,6 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Copy the values from the input struct to a new Movie struct.
 	movie := data.Movie{
 		Title:   input.Title,
 		Year:    input.Year,
@@ -33,14 +32,24 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 
 	v := validator.New()
 
-	// Call the ValidateMovie() function, and if any checks fail, return a response
-	// containing the errors.
 	if data.ValidateMovie(v, movie); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	fmt.Fprintf(w, "%+v\n", input)
+	movie, err = app.models.Movies.Insert(movie)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", movie.ID))
+
+	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": movie}, headers)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request) {
