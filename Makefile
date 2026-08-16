@@ -10,3 +10,5 @@ migrate-roll-back:
 	migrate -path=./migrations -database="postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable" down 1
 migrate-down:
 	migrate -path=./migrations -database="postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable" down
+
+a40b278dd41c8ca68d39522a692ffceb
