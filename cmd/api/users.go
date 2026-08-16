@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/DimaMaimesko/greenlight/internal/data"
@@ -53,19 +52,14 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	go func() {
-		defer func() {
-			pv := recover()
-			if pv != nil {
-				app.logger.Error(fmt.Sprintf("%v", pv))
-			}
-		}()
-
+	// Use the background helper to execute an anonymous function that sends the welcome
+	// email.
+	app.background(func() {
 		err := app.mailer.Send(user.Email, "user_welcome.tmpl", user)
 		if err != nil {
 			app.logger.Error(err.Error())
 		}
-	}()
+	})
 
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user}, nil)
 	if err != nil {
