@@ -146,3 +146,33 @@ func (app *application) requireActivatedUser(next http.HandlerFunc) http.Handler
 		next.ServeHTTP(w, r)
 	})
 }
+
+// Notice that the first argument in the requirePermission() function represents the
+// permission code that we want the user to have.
+func (app *application) requireActivatedUserWithPermission(code string, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authenticatedUser, found := app.contextGetAuthenticatedUser(r)
+		if !found {
+			app.authenticationRequiredResponse(w, r)
+			return
+		}
+
+		if !authenticatedUser.Activated {
+			app.inactiveAccountResponse(w, r)
+			return
+		}
+
+		permissions, err := app.models.Permissions.GetAllForUser(authenticatedUser.ID)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		if !permissions.Include(code) {
+			app.missingPermissionResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
