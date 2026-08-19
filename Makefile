@@ -11,3 +11,4 @@ migrate-roll-back:
 migrate-down:
 	migrate -path=./migrations -database="postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable" down
 
+http://localhost:4000/debug/vars
