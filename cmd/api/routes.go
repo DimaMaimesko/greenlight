@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func (app *application) routes() http.Handler {
@@ -28,5 +29,9 @@ func (app *application) routes() http.Handler {
 
 	router.Handler(http.MethodGet, "/debug/vars", expvar.Handler())
 
-	return app.metrics(app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router)))))
+	// Prometheus scrape endpoint, serving only our custom registry.
+	router.Handler(http.MethodGet, "/metrics", promhttp.HandlerFor(app.metrics.registry, promhttp.HandlerOpts{}))
+
+	return app.prometheusMetrics(router, app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router)))))
+
 }

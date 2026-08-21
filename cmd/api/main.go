@@ -48,11 +48,12 @@ type config struct {
 
 // Update the application struct to hold a pointer to a new Mailer instance.
 type application struct {
-	config config
-	logger *slog.Logger
-	models data.Models
-	mailer *mailer.Mailer
-	wg     sync.WaitGroup
+	config  config
+	logger  *slog.Logger
+	models  data.Models
+	mailer  *mailer.Mailer
+	wg      sync.WaitGroup
+	metrics *metrics
 }
 
 func main() {
@@ -128,10 +129,11 @@ func main() {
 
 	// And add it to the application struct.
 	app := &application{
-		config: cfg,
-		logger: logger,
-		models: data.NewModels(db),
-		mailer: mailer,
+		config:  cfg,
+		logger:  logger,
+		models:  data.NewModels(db),
+		mailer:  mailer,
+		metrics: newMetrics(db),
 	}
 
 	err = app.serve()

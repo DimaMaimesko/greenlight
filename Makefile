@@ -11,4 +11,16 @@ migrate-roll-back:
 migrate-down:
 	migrate -path=./migrations -database="postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable" down
 
-http://localhost:4000/debug/vars
+
+.PHONY: monitoring/up monitoring/down
+
+monitoring/up:
+	docker compose -f ./internal/monitoring/docker-compose.yml up -d
+
+monitoring/down:
+	docker compose -f ./internal/monitoring/docker-compose.yml down
+
+# http://localhost:4000/debug/vars   - expvar
+# http://localhost:4000/metrics     - prometheus scrape endpoint
+# http://localhost:9090             - prometheus UI
+# http://localhost:3000             - grafana (admin/admin)
