@@ -19,6 +19,7 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 		defer func() {
 			pv := recover()
 			if pv != nil {
+				app.metrics.panicsTotal.Inc()
 				w.Header().Set("Connection", "close")
 				app.serverErrorResponse(w, r, fmt.Errorf("%v", pv))
 			}

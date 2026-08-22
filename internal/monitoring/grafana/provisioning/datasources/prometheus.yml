@@ -1,0 +1,13 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus          # fixed uid so provisioned dashboards can reference it
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

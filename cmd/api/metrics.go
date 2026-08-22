@@ -18,6 +18,9 @@ type metrics struct {
 	requestsTotal    *prometheus.CounterVec
 	requestDuration  *prometheus.HistogramVec
 	requestsInFlight prometheus.Gauge
+
+	panicsTotal          prometheus.Counter
+	backgroundTasksTotal *prometheus.CounterVec
 }
 
 func newMetrics(db *sql.DB) *metrics {
@@ -57,9 +60,32 @@ func newMetrics(db *sql.DB) *metrics {
 			Name: "http_requests_in_flight",
 			Help: "Current number of in-flight HTTP requests.",
 		}),
+
+		// Panics recovered by the recoverPanic middleware. A panic-driven 500
+		// is a stronger signal than a regular 500, so track it separately.
+		panicsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "http_panics_recovered_total",
+			Help: "Total number of panics recovered by middleware.",
+		}),
+
+		// Fire-and-forget goroutines (e.g. welcome emails) are invisible to
+		// HTTP metrics — this is the only way to know they're failing.
+		backgroundTasksTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "background_tasks_total",
+			Help: "Background tasks by name and result (ok|error).",
+		}, []string{"task", "result"}),
 	}
 
-	reg.MustRegister(m.requestsTotal, m.requestDuration, m.requestsInFlight)
+	// Standard pattern: a gauge that is always 1, with the version as a label.
+	// Lets you correlate metric changes with deployments in Grafana.
+	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "greenlight_build_info",
+		Help: "Build information.",
+	}, []string{"version"})
+	buildInfo.WithLabelValues(version).Set(1)
+
+	reg.MustRegister(m.requestsTotal, m.requestDuration, m.requestsInFlight,
+		m.panicsTotal, m.backgroundTasksTotal, buildInfo)
 
 	return m
 }

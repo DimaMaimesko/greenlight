@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: Greenlight
+    folder: Greenlight            # dashboards appear under this folder in the UI
+    type: file
+    allowUiUpdates: true          # you can tweak panels in the UI while learning
+    updateIntervalSeconds: 10     # Grafana re-reads the folder every 10s
+    options:
+      path: /etc/grafana/provisioning/dashboards

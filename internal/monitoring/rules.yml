@@ -1,0 +1,50 @@
+groups:
+  - name: greenlight-api
+    rules:
+      # Alert state machine: inactive -> pending (expr true, waiting "for") -> firing
+      - alert: APIDown
+        expr: up{job="greenlight-api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Greenlight API is unreachable"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[2m]))
+            / sum(rate(http_requests_total[2m])) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of requests are failing with 5xx"
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 latency is above 500ms"
+
+      # Easy to trigger with your rate limiter (2 rps) — great for demos.
+      - alert: ManyRateLimitedRequests
+        expr: sum(rate(http_requests_total{status="429"}[1m])) > 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clients are being rate limited (>1 rps of 429s)"
+
+      - alert: DBPoolNearlySaturated
+        expr: |
+          go_sql_in_use_connections{db_name="greenlight"}
+            / go_sql_max_open_connections{db_name="greenlight"} > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 80% of DB connections in use"

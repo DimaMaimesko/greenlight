@@ -1,0 +1,12 @@
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+
+receivers:
+  # A no-op receiver is enough for learning — you'll watch alerts in the
+  # Alertmanager UI (localhost:9093). In production you'd configure
+  # slack_configs, email_configs, webhook_configs, etc. here.
+  - name: default
