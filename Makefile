@@ -12,13 +12,31 @@ migrate-down:
 	migrate -path=./migrations -database="postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable" down
 
 
-.PHONY: monitoring/up monitoring/down
+.PHONY: monitoring/up monitoring/down monitoring/pull monitoring/restart monitoring/config monitoring/logs monitoring/ps
 
 monitoring/up:
-	docker compose -f ./internal/monitoring/docker-compose.yml up -d
+	docker compose -f ./monitoring/docker-compose.yml up -d
 
 monitoring/down:
-	docker compose -f ./internal/monitoring/docker-compose.yml down
+	docker compose -f ./monitoring/docker-compose.yml down
+
+# Refresh the :latest images (the real equivalent of "build" here).
+monitoring/pull:
+	docker compose -f ./monitoring/docker-compose.yml pull
+
+# Recreate containers — needed after changing `command:` or `volumes:`.
+monitoring/restart:
+	docker compose -f ./monitoring/docker-compose.yml up -d --force-recreate
+
+# Validate + show the fully resolved compose file (catches YAML/path mistakes).
+monitoring/config:
+	docker compose -f ./monitoring/docker-compose.yml config
+
+monitoring/ps:
+	docker compose -f ./monitoring/docker-compose.yml ps
+
+monitoring/logs:
+	docker compose -f ./monitoring/docker-compose.yml logs -f
 
 .PHONY: load/light load/heavy load/errors
 
