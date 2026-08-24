@@ -7,6 +7,8 @@ import (
 
 	"github.com/DimaMaimesko/greenlight/internal/data"
 	"github.com/DimaMaimesko/greenlight/internal/validator"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -40,9 +42,16 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
-
+	// Child span: in Jaeger you'll see exactly how much of this request was
+	// spent on the user insert vs everything else. The span automatically
+	// becomes a child of the server span created by otelhttp, because the
+	// parent lives in r.Context().
+	_, span := otel.Tracer("greenlight/api").Start(r.Context(), "db.users.insert")
 	user, err = app.models.Users.Insert(user)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "user insert failed")
+		span.End()
 		switch {
 		case errors.Is(err, data.ErrDuplicateEmail):
 			v.AddError("email", "a user with this email address already exists")
@@ -52,6 +61,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
+	span.End()
 
 	err = app.models.Permissions.AddForUser(user.ID, "movies:read")
 	if err != nil {

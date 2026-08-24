@@ -57,4 +57,5 @@ load/errors:
 # http://localhost:4000/metrics     - prometheus scrape endpoint
 # http://localhost:9090             - prometheus UI
 # http://localhost:9093             - alertmanager UI
+# http://localhost:16686            - jaeger UI (traces)
 # http://localhost:3000             - grafana (admin/admin)

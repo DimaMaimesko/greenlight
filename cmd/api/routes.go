@@ -6,6 +6,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func (app *application) routes() http.Handler {
@@ -32,6 +33,20 @@ func (app *application) routes() http.Handler {
 	// Prometheus scrape endpoint, serving only our custom registry.
 	router.Handler(http.MethodGet, "/metrics", promhttp.HandlerFor(app.metrics.registry, promhttp.HandlerOpts{}))
 
-	return app.prometheusMetrics(router, app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router)))))
+	handler := app.prometheusMetrics(router, app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router)))))
+
+	// Outermost layer: starts a server span per request and extracts incoming
+	// W3C trace context, so traces continue across service boundaries.
+	return otelhttp.NewHandler(handler, "greenlight-api",
+		// Same cardinality rule as metric labels: span names must be route
+		// templates ("GET /v1/movies/:id"), never raw paths.
+		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+			return r.Method + " " + routePattern(router, r)
+		}),
+		// Don't trace Prometheus scrapes and expvar polls — pure noise.
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/metrics" && r.URL.Path != "/debug/vars"
+		}),
+	)
 
 }

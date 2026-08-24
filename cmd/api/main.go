@@ -44,6 +44,11 @@ type config struct {
 	cors struct {
 		trustedOrigins []string
 	}
+	tracing struct {
+		enabled     bool
+		endpoint    string
+		sampleRatio float64
+	}
 }
 
 // Update the application struct to hold a pointer to a new Mailer instance.
@@ -71,6 +76,12 @@ func main() {
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+
+	// Tracing. The endpoint is host:port WITHOUT a scheme — otlptracehttp adds
+	// it. 4318 is the OTLP/HTTP ingest port; 16686 is the UI/query API.
+	flag.BoolVar(&cfg.tracing.enabled, "tracing-enabled", true, "Enable OpenTelemetry tracing")
+	flag.StringVar(&cfg.tracing.endpoint, "tracing-endpoint", "localhost:4318", "OTLP/HTTP trace collector endpoint (host:port)")
+	flag.Float64Var(&cfg.tracing.sampleRatio, "tracing-sample-ratio", 1.0, "Head-based trace sampling ratio (0.0-1.0)")
 
 	// Read the SMTP server configuration settings into the config struct, using the
 	// Mailtrap settings as the default values. IMPORTANT: If you're following along,
@@ -103,6 +114,24 @@ func main() {
 	defer db.Close()
 
 	logger.Info("database connection pool established")
+
+	if cfg.tracing.enabled {
+		shutdownTracing, err := setupTracing(context.Background(), cfg)
+		if err != nil {
+			logger.Error(err.Error())
+			os.Exit(1)
+		}
+		// Flush buffered spans on shutdown — without this, the last batch of
+		// spans is silently lost when the process exits.
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := shutdownTracing(ctx); err != nil {
+				logger.Error("tracing shutdown: " + err.Error())
+			}
+		}()
+		logger.Info("tracing enabled", "endpoint", cfg.tracing.endpoint)
+	}
 
 	mailer, err := mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender)
 	if err != nil {
