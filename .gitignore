@@ -1,0 +1,13 @@
+# Local environment configuration — never commit; use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Compiled binaries
+/bin/
+
+# macOS
+.DS_Store
+
+# IDE
+/.idea/

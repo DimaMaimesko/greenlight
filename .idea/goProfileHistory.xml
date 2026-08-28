@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GoProfileHistory">
+    <profile entry="$USER_HOME$/GoLandProfiles/go_build_github_com_DimaMaimesko_greenlight_cmd_api-allocs-2026-08-25-001445-711.pprof">
+      <GoProfileMapEntry>
+        <option name="buildAnchorMillis" value="1787606069636" />
+        <option name="file" value="go_build_github_com_DimaMaimesko_greenlight_cmd_api-allocs-2026-08-25-001445-711.pprof" />
+        <option name="ours" value="true" />
+        <option name="profileType" value="ALLOCS" />
+      </GoProfileMapEntry>
+    </profile>
+    <profile entry="$USER_HOME$/GoLandProfiles/go_build_github_com_DimaMaimesko_greenlight_cmd_api-goroutine-2026-08-25-001457-708.pprof">
+      <GoProfileMapEntry>
+        <option name="buildAnchorMillis" value="1787606069636" />
+        <option name="file" value="go_build_github_com_DimaMaimesko_greenlight_cmd_api-goroutine-2026-08-25-001457-708.pprof" />
+        <option name="ours" value="true" />
+        <option name="profileType" value="GOROUTINE" />
+      </GoProfileMapEntry>
+    </profile>
+    <profile entry="$USER_HOME$/GoLandProfiles/go_build_github_com_DimaMaimesko_greenlight_cmd_api-goroutine-2026-08-25-001600-373.pprof">
+      <GoProfileMapEntry>
+        <option name="buildAnchorMillis" value="1787606069636" />
+        <option name="file" value="go_build_github_com_DimaMaimesko_greenlight_cmd_api-goroutine-2026-08-25-001600-373.pprof" />
+        <option name="ours" value="true" />
+        <option name="profileType" value="GOROUTINE" />
+      </GoProfileMapEntry>
+    </profile>
+    <profile entry="$USER_HOME$/GoLandProfiles/go_build_github_com_DimaMaimesko_greenlight_cmd_api-cpu-2026-08-25-001620-584.pprof">
+      <GoProfileMapEntry>
+        <option name="buildAnchorMillis" value="1787606069636" />
+        <option name="file" value="go_build_github_com_DimaMaimesko_greenlight_cmd_api-cpu-2026-08-25-001620-584.pprof" />
+        <option name="ours" value="true" />
+        <option name="profileType" value="CPU" />
+      </GoProfileMapEntry>
+    </profile>
+  </component>
+</project>
