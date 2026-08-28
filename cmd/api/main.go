@@ -22,7 +22,8 @@ const version = "1.0.0"
 type config struct {
 	port int
 	env  string
-	db   struct {
+
+	db struct {
 		dsn          string
 		maxOpenConns int
 		maxIdleConns int
@@ -44,6 +45,7 @@ type config struct {
 	cors struct {
 		trustedOrigins []string
 	}
+	logLevel slog.Level
 }
 
 // Update the application struct to hold a pointer to a new Mailer instance.
@@ -60,6 +62,10 @@ func main() {
 
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+
+	// slog.Level implements encoding.TextUnmarshaler, so flag.TextVar() parses
+	// values like "debug" or "WARN" straight into it.
+	flag.TextVar(&cfg.logLevel, "log-level", slog.LevelInfo, "Minimum log level (debug|info|warn|error)")
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable", "PostgreSQL DSN")
 
@@ -90,9 +96,10 @@ func main() {
 		cfg.cors.trustedOrigins = strings.Fields(val)
 		return nil
 	})
+
 	flag.Parse()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.logLevel}))
 
 	db, err := openDB(cfg)
 	if err != nil {
