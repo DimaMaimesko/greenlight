@@ -1,0 +1,801 @@
+openapi: 3.1.0
+
+info:
+  title: Greenlight API
+  version: 1.0.0
+  summary: JSON API for managing movie records.
+  description: |
+    Movie CRUD behind bearer-token authentication and per-user permissions.
+
+    Accounts register themselves (`POST /v1/users`), are activated with a token
+    emailed to them (`PUT /v1/users/activated`), then exchange their credentials
+    for a 24-hour bearer token (`POST /v1/tokens/authentication`).
+
+    Every response body is a single-key envelope — `{"movie": …}`,
+    `{"movies": …, "metadata": …}`, `{"error": …}` — rather than a bare object.
+
+    All routes are subject to an IP-keyed rate limiter (2 rps / burst 4 by
+    default, `-limiter-enabled=false` to turn it off), so any operation may
+    return `429`.
+
+servers:
+  - url: http://localhost:4000
+    description: Local development server (`go run ./cmd/api`)
+
+tags:
+  - name: healthcheck
+    description: Liveness and build information.
+  - name: users
+    description: Registration and activation.
+  - name: tokens
+    description: Authentication tokens.
+  - name: movies
+    description: Movie records. All routes require an activated account.
+  - name: metrics
+    description: Runtime metrics.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/healthcheck:
+    get:
+      tags: [healthcheck]
+      summary: Report application status
+      operationId: healthcheck
+      security: []
+      responses:
+        "200":
+          description: The application is available.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, system_info]
+                properties:
+                  status:
+                    type: string
+                    const: available
+                  system_info:
+                    type: object
+                    required: [environment, version]
+                    properties:
+                      environment:
+                        type: string
+                        description: Value of the `-env` flag.
+                        examples: [development]
+                      version:
+                        type: string
+                        examples: ["1.0.0"]
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /v1/users:
+    post:
+      tags: [users]
+      summary: Register a new user
+      operationId: registerUser
+      security: []
+      description: |
+        Creates an inactive account, grants it the `movies:read` permission, and
+        sends an activation token (valid for 3 days) to the supplied address in
+        a background goroutine. Only the SHA-256 hash of that token is stored,
+        so the plaintext is available only from the email.
+
+        The `202` is returned before the email has necessarily been sent; a
+        failure to send is logged, not reported to the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  description: At most 500 bytes.
+                  examples: [Alice Smith]
+                email:
+                  type: string
+                  format: email
+                  examples: [alice@example.com]
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 72
+                  description: Between 8 and 72 bytes; hashed with bcrypt (cost 12).
+                  examples: [pa55word1234]
+      responses:
+        "202":
+          description: Account created; activation email queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          description: |
+            Validation failed, or the email address is already registered
+            (reported as `{"error": {"email": "a user with this email address
+            already exists"}}`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /v1/users/activated:
+    put:
+      tags: [users]
+      summary: Activate a user
+      operationId: activateUser
+      security: []
+      description: |
+        Marks the account owning the token as activated and deletes all of its
+        activation tokens, so the call is not replayable — a second attempt with
+        the same token returns `422`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 26
+                  maxLength: 26
+                  description: The 26-character plaintext token from the welcome email.
+      responses:
+        "200":
+          description: The activated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/EditConflict"
+        "422":
+          description: |
+            The token is malformed (not 26 bytes), or is unknown, expired, or
+            already used — `{"error": {"token": "invalid or expired activation
+            token"}}`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /v1/tokens/authentication:
+    post:
+      tags: [tokens]
+      summary: Exchange credentials for a bearer token
+      operationId: createAuthenticationToken
+      security: []
+      description: |
+        Issues a 24-hour token. Succeeds for inactive accounts too — the
+        activation check happens when the token is used, not when it is issued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  examples: [alice@example.com]
+                password:
+                  type: string
+                  examples: [pa55word1234]
+      responses:
+        "201":
+          description: A new authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authentication_token]
+                properties:
+                  authentication_token:
+                    $ref: "#/components/schemas/Token"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: No account matches the email address, or the password is wrong.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid authentication credentials
+        "422":
+          description: The email is not a valid address, or the password is outside 8–72 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /v1/movies:
+    get:
+      tags: [movies]
+      summary: List movies
+      operationId: listMovies
+      description: Requires the `movies:read` permission, granted at registration.
+      parameters:
+        - name: title
+          in: query
+          required: false
+          description: |
+            Case-insensitive full-text search on the title. Matches on lexemes,
+            so `black panther` matches "Black Panther". Omitted or empty matches
+            everything.
+          schema:
+            type: string
+            default: ""
+          examples:
+            search:
+              value: black panther
+        - name: genres
+          in: query
+          required: false
+          description: |
+            Comma-separated list. A movie matches only if it contains *all* of
+            the listed genres.
+          schema:
+            type: string
+            default: ""
+          examples:
+            two:
+              value: adventure,action
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000000
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          required: false
+          description: A `-` prefix sorts descending. Any other value is a `422`.
+          schema:
+            type: string
+            default: id
+            enum: [id, title, year, runtime, -id, -title, -year, -runtime]
+      responses:
+        "200":
+          description: |
+            The matching page of movies. When nothing matches, `movies` is `[]`
+            and `metadata` is `{}`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [movies, metadata]
+                properties:
+                  movies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Movie"
+                  metadata:
+                    $ref: "#/components/schemas/Metadata"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: |
+            A pagination parameter is out of range or non-numeric, or `sort` is
+            not in the safelist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+              example:
+                error:
+                  sort: invalid sort value
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    post:
+      tags: [movies]
+      summary: Create a movie
+      operationId: createMovie
+      description: Requires the `movies:write` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, year, runtime, genres]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  description: At most 500 bytes.
+                  examples: [Black Panther]
+                year:
+                  type: integer
+                  minimum: 1888
+                  description: Not in the future.
+                  examples: [2018]
+                runtime:
+                  $ref: "#/components/schemas/Runtime"
+                genres:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  uniqueItems: true
+                  items:
+                    type: string
+                  examples:
+                    - [action, adventure]
+      responses:
+        "201":
+          description: The created movie.
+          headers:
+            Location:
+              description: Path of the new resource.
+              schema:
+                type: string
+                examples: [/v1/movies/1]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/MovieValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /v1/movies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/MovieID"
+
+    get:
+      tags: [movies]
+      summary: Show a movie
+      operationId: showMovie
+      description: Requires the `movies:read` permission.
+      responses:
+        "200":
+          description: The requested movie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    patch:
+      tags: [movies]
+      summary: Partially update a movie
+      operationId: updateMovie
+      description: |
+        Requires the `movies:write` permission. Omitted fields are left
+        unchanged; the merged record is then validated in full, so an update
+        cannot leave a movie in an invalid state.
+
+        Updates are guarded by the record's `version`: if another request
+        modifies the movie between the read and the write, this returns `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                year:
+                  type: integer
+                  minimum: 1888
+                runtime:
+                  $ref: "#/components/schemas/Runtime"
+                genres:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  uniqueItems: true
+                  items:
+                    type: string
+            examples:
+              year only:
+                value:
+                  year: 2017
+              replace genres:
+                value:
+                  genres: [comedy, action, sci-fi]
+      responses:
+        "200":
+          description: The updated movie, with an incremented `version`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/EditConflict"
+        "422":
+          $ref: "#/components/responses/MovieValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    delete:
+      tags: [movies]
+      summary: Delete a movie
+      operationId: deleteMovie
+      description: Requires the `movies:write` permission.
+      responses:
+        "200":
+          description: The movie was deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    const: movie successfully deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /debug/vars:
+    get:
+      tags: [metrics]
+      summary: Runtime metrics (expvar)
+      operationId: debugVars
+      security: []
+      description: |
+        The standard `expvar` handler, plus this application's own variables:
+        `version`, `goroutines`, `database` (`sql.DBStats`), `timestamp`,
+        `total_requests_received`, `total_responses_sent` and
+        `total_processing_time_μs`.
+
+        Unauthenticated — do not expose this route publicly as it stands.
+      responses:
+        "200":
+          description: Every published expvar, as one JSON object.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        The `token` from `POST /v1/tokens/authentication`, sent as
+        `Authorization: Bearer <token>`. Valid for 24 hours.
+
+        Permissions are read from the database on every request, so granting or
+        revoking one takes effect immediately without reissuing the token.
+
+  parameters:
+    MovieID:
+      name: id
+      in: path
+      required: true
+      description: A non-numeric or non-positive value is treated as a `404`.
+      schema:
+        type: integer
+        minimum: 1
+      examples:
+        first:
+          value: 1
+
+  schemas:
+    Runtime:
+      type: string
+      pattern: '^-?\d+ mins$'
+      description: |
+        Duration in whole minutes, serialised as `"<n> mins"`. Any other shape
+        (a bare number, `"134 minutes"`) is rejected as a `400`, not a `422`,
+        because it fails at the JSON decoding stage.
+      examples: ["134 mins"]
+
+    Movie:
+      type: object
+      required: [id, title, version]
+      properties:
+        id:
+          type: integer
+          examples: [1]
+        title:
+          type: string
+          examples: [Black Panther]
+        year:
+          type: integer
+          description: Omitted when zero.
+          examples: [2018]
+        runtime:
+          $ref: "#/components/schemas/Runtime"
+        genres:
+          type: array
+          items:
+            type: string
+          description: Omitted when empty.
+          examples:
+            - [action, adventure]
+        version:
+          type: integer
+          description: |
+            Incremented on every update; used for optimistic concurrency
+            control. Not a field you send.
+          examples: [1]
+
+    MovieEnvelope:
+      type: object
+      required: [movie]
+      properties:
+        movie:
+          $ref: "#/components/schemas/Movie"
+
+    Metadata:
+      type: object
+      description: Pagination metadata. Empty (`{}`) when no records matched.
+      properties:
+        current_page:
+          type: integer
+        page_size:
+          type: integer
+        first_page:
+          type: integer
+          const: 1
+        last_page:
+          type: integer
+        total_records:
+          type: integer
+      examples:
+        - current_page: 2
+          page_size: 5
+          first_page: 1
+          last_page: 3
+          total_records: 12
+
+    User:
+      type: object
+      description: The password hash and record version are never serialised.
+      required: [id, created_at, name, email, activated]
+      properties:
+        id:
+          type: integer
+          examples: [1]
+        created_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+          examples: [Alice Smith]
+        email:
+          type: string
+          format: email
+          examples: [alice@example.com]
+        activated:
+          type: boolean
+          examples: [false]
+
+    Token:
+      type: object
+      required: [token, expiry]
+      properties:
+        token:
+          type: string
+          description: 26-character plaintext. Only its hash is stored server-side.
+        expiry:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      description: |
+        Every error response is a single `error` key. It holds a string for
+        most failures, and a field→message map for `422` validation failures.
+      required: [error]
+      properties:
+        error:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties:
+                type: string
+
+    ValidationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          description: One entry per field that failed validation.
+          additionalProperties:
+            type: string
+      examples:
+        - error:
+            name: must be provided
+            email: must be a valid email address
+            password: must be at least 8 bytes long
+
+  responses:
+    BadRequest:
+      description: |
+        The request body is malformed, empty, larger than 1 MB, contains an
+        unknown field, has a value of the wrong type, or holds more than one
+        JSON value. The message names the specific problem.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unknown field:
+              value:
+                error: body contains unknown key "rating"
+            wrong type:
+              value:
+                error: body contains incorrect JSON type for field "year"
+
+    Unauthorized:
+      description: |
+        No `Authorization` header, or a header that is not a well-formed
+        `Bearer <26-char token>`, or a token that is unknown or expired.
+      headers:
+        WWW-Authenticate:
+          description: Sent when the header is present but unusable.
+          schema:
+            type: string
+            const: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            anonymous:
+              value:
+                error: you must be authenticated to access this resource
+            bad token:
+              value:
+                error: invalid or missing authentication token
+
+    Forbidden:
+      description: The account is authenticated but not activated, or lacks the permission.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            inactive:
+              value:
+                error: your user account must be activated to access this resource
+            missing permission:
+              value:
+                error: your user account doesn't have the necessary permissions to access this resource
+
+    NotFound:
+      description: No movie with that id, or the id is not a positive integer.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: the requested resource could not be found
+
+    EditConflict:
+      description: The record changed between the read and the write. Retry the request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: unable to update the record due to an edit conflict, please try again
+
+    MovieValidationError:
+      description: One or more movie fields failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+          example:
+            error:
+              year: must be greater than 1888
+              genres: must not contain more than 5 genres
+
+    RateLimitExceeded:
+      description: |
+        The IP exceeded the limiter (2 rps, burst 4 by default). Applies to
+        every route.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: rate limit exceeded
+
+    ServerError:
+      description: Unexpected failure. The details are logged, not returned.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: the server encountered a problem and could not process your request
