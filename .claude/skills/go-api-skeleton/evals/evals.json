@@ -1,0 +1,74 @@
+{
+  "skill_name": "go-api-skeleton",
+  "evals": [
+    {
+      "id": 1,
+      "name": "base-template",
+      "prompt": "Scaffold me a Go API template with routing, env config, CORS, JSON helpers, Postgres, migrations and auth. Module github.com/dimamaimesko/starter.",
+      "expected_output": "A runnable Go JSON API project with module github.com/dimamaimesko/starter: routing, configuration from the environment, CORS restricted to trusted origins, JSON read/write helpers with JSON errors, a PostgreSQL connection pool, up/down SQL migrations and working register/login/protected-route auth.",
+      "files": [],
+      "expectations": [
+        "The project is a Go module named github.com/dimamaimesko/starter",
+        "go build ./... and go vet ./... pass",
+        "staticcheck reports no problems",
+        "gofmt reports no unformatted files",
+        "go.mod has no web framework, ORM, query builder, or config/logging library",
+        "Migrations are up/down SQL pairs that apply, fully roll back and re-apply on an empty PostgreSQL database",
+        "Configuration comes from environment variables listed in a .env.example (or equivalent), with no hard-coded database credentials in Go code",
+        "The API starts against PostgreSQL and its healthcheck returns 200 with a JSON body",
+        "Auth works end to end: a user can register and log in to get a token, and a protected endpoint returns 401 without the token and 2xx with it",
+        "CORS answers only configured origins (no wildcard) and handles preflight requests",
+        "Unknown routes and wrong methods return JSON 404/405, and a malformed JSON body returns 400 with a clear message",
+        "Passwords are stored hashed (bcrypt or argon2) and auth tokens are not stored in plaintext",
+        "The server shuts down gracefully on SIGINT/SIGTERM",
+        "The README explains setup, configuration and the endpoints"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "bookstore-api",
+      "prompt": "Create a bookstore API in ./bookstore (module github.com/dimamaimesko/bookstore) with books: title, author, isbn, price, published year. Anyone logged in can read, only staff can edit.",
+      "expected_output": "A runnable Go JSON API in ./bookstore with users and token auth, a books resource (title, author, isbn, price, published year) with create/list/show/update/delete, where any logged-in user can read and only staff can write.",
+      "files": [],
+      "expectations": [
+        "The project is in ./bookstore and is a Go module named github.com/dimamaimesko/bookstore",
+        "go build ./... and go vet ./... pass",
+        "staticcheck reports no problems",
+        "gofmt reports no unformatted files",
+        "go.mod has no web framework, ORM, query builder, or config/logging library",
+        "Migrations are up/down SQL pairs that apply, fully roll back and re-apply on an empty PostgreSQL database",
+        "No leftover template example code or placeholders (no items resource, example.com/app or APP_ variables)",
+        "Books have create, list, show, update and delete endpoints with title, author, isbn, price and published year",
+        "Unauthenticated requests to the book endpoints get 401",
+        "A logged-in user without staff rights can list and read books but gets 403 when creating, updating or deleting",
+        "A staff user can create, update and delete books",
+        "Invalid book input (such as a missing title, malformed ISBN, negative price or future year) is rejected with 422 or 400 and per-field messages",
+        "Price is not stored as a floating-point number (integer cents or NUMERIC)",
+        "Updates are protected against lost concurrent edits (a version column or equivalent)",
+        "The list endpoint supports pagination"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "greenlight-reviews",
+      "prompt": "Add reviews to greenlight: a user can post a review (rating 1-5 and text) for a movie, list a movie's reviews, and delete their own.",
+      "expected_output": "Changes to the existing greenlight project that add movie reviews (create, list for a movie, delete own) following the project's existing conventions, with new migrations and docs.",
+      "files": [],
+      "expectations": [
+        "go build ./... and go vet ./... pass",
+        "staticcheck reports no problems",
+        "gofmt reports no unformatted files",
+        "No new third-party dependencies were added to go.mod",
+        "Existing migrations are unchanged and the new ones are up/down pairs numbered after 000006",
+        "All migrations apply, fully roll back and re-apply on an empty PostgreSQL database",
+        "An authenticated, activated user can post a review for an existing movie, and a rating outside 1-5 or missing text gets 422",
+        "Posting a review for a movie that doesn't exist returns 404",
+        "A movie's reviews can be listed",
+        "A user can delete their own review; deleting another user's review is refused (403 or 404) and the review remains",
+        "The change follows the project's conventions: envelope responses, helpers from cmd/api/errors.go, a model in internal/data with value semantics and per-query timeouts, and routes registered in routes.go with the existing auth wrappers",
+        "The README or docs/openapi.yaml documents the new review endpoints",
+        "Existing movie endpoints still work"
+      ]
+    }
+  ]
+}
