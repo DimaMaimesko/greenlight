@@ -15,7 +15,7 @@ expvar metrics.
 
 ### 1. Set up the database
 
-The defaults everywhere (the `-db-dsn` flag and every `make` target) assume
+`.env.example` and the `make` targets assume
 `postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable`:
 
 ```bash
@@ -27,22 +27,34 @@ psql greenlight -c "CREATE EXTENSION IF NOT EXISTS citext;"
 The `citext` extension has no migration of its own, so it has to be created
 before the migrations run.
 
+Then create your local config — `.env` is git-ignored:
+
+```bash
+cp .env.example .env
+```
+
+The API loads `.env` on startup and the `Makefile` includes it, so both use
+the same DSN. Variables already set in the real environment take precedence
+over the file; in staging and production set them there and skip `.env`.
+
 ### 2. Run the migrations
 
 ```bash
-make migrate                   # apply all migrations
-make check-migration-version   # print the current version
-make migrate-roll-back         # undo the last migration
-make migrate-down              # undo everything
-make create-table              # scaffold a new pair of .sql files in ./migrations
+make db/migrations/up                   # apply all migrations
+make db/migrations/version              # print the current version
+make db/migrations/rollback             # undo the last migration
+make db/migrations/goto version=3       # move up or down to a specific version
+make db/migrations/down                 # undo everything
+make db/migrations/new name=create_foo  # scaffold a new pair of .sql files in ./migrations
 ```
 
-Each target hardcodes the DSN above — edit the `Makefile` if yours differs.
+The targets that change the schema ask for confirmation first. `make help`
+lists every target.
 
 ### 3. Run the API
 
 ```bash
-go run ./cmd/api
+make run/api    # or: go run ./cmd/api
 ```
 
 It listens on `:4000` and logs `database connection pool established` on a
@@ -55,28 +67,32 @@ go run ./cmd/api -limiter-enabled=false
 go run ./cmd/api -cors-trusted-origins="http://localhost:9000"
 ```
 
-### Configuration flags
+### Configuration
 
-| Flag | Default |
-| --- | --- |
-| `-port` | `4000` |
-| `-env` | `development` |
-| `-log-level` | `info` — `debug` also logs a line per CORS request |
-| `-db-dsn` | `postgres://greenlight:pa55word@localhost/greenlight?sslmode=disable` |
-| `-db-max-open-conns` | `25` |
-| `-db-max-idle-conns` | `25` |
-| `-db-max-idle-time` | `15m` |
-| `-limiter-rps` | `2` |
-| `-limiter-burst` | `4` |
-| `-limiter-enabled` | `true` |
-| `-smtp-host` / `-smtp-port` | `sandbox.smtp.mailtrap.io` / `2525` |
-| `-smtp-username` / `-smtp-password` | Mailtrap sandbox credentials |
-| `-smtp-sender` | `Greenlight <no-reply@dima.maimesko.com>` |
-| `-cors-trusted-origins` | empty (space-separated list) |
+Every setting is a command-line flag. Where an environment variable is listed,
+it supplies the flag's default, so the precedence is flag → environment
+variable → `.env` → built-in default.
 
-The SMTP defaults point at a Mailtrap sandbox inbox, so welcome and activation
-emails land there rather than in a real mailbox — swap in your own credentials
-to send for real.
+| Flag | Environment variable | Default |
+| --- | --- | --- |
+| `-port` | `GREENLIGHT_PORT` | `4000` |
+| `-env` | `GREENLIGHT_ENV` | `development` |
+| `-log-level` | | `info` — `debug` also logs a line per CORS request |
+| `-db-dsn` | `GREENLIGHT_DB_DSN` | none — required, the API refuses to start without it |
+| `-db-max-open-conns` | | `25` |
+| `-db-max-idle-conns` | | `25` |
+| `-db-max-idle-time` | | `15m` |
+| `-limiter-rps` | | `2` |
+| `-limiter-burst` | | `4` |
+| `-limiter-enabled` | | `true` |
+| `-smtp-host` / `-smtp-port` | `GREENLIGHT_SMTP_HOST` / `GREENLIGHT_SMTP_PORT` | `sandbox.smtp.mailtrap.io` / `2525` |
+| `-smtp-username` / `-smtp-password` | `GREENLIGHT_SMTP_USERNAME` / `GREENLIGHT_SMTP_PASSWORD` | none |
+| `-smtp-sender` | `GREENLIGHT_SMTP_SENDER` | `Greenlight <no-reply@dima.maimesko.com>` |
+| `-cors-trusted-origins` | `GREENLIGHT_CORS_TRUSTED_ORIGINS` | empty (space-separated list) |
+
+The SMTP host points at a Mailtrap sandbox inbox, so welcome and activation
+emails land there rather than in a real mailbox. Put your Mailtrap credentials
+in `.env`, or swap in a real SMTP server's to send for real.
 
 ## API reference
 
