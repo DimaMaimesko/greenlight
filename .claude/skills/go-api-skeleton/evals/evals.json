@@ -45,7 +45,8 @@
         "Invalid book input (such as a missing title, malformed ISBN, negative price or future year) is rejected with 422 or 400 and per-field messages",
         "Price is not stored as a floating-point number (integer cents or NUMERIC)",
         "Updates are protected against lost concurrent edits (a version column or equivalent)",
-        "The list endpoint supports pagination"
+        "The list endpoint supports pagination",
+        "New validation and parsing logic has table-driven tests that pass with go test"
       ]
     },
     {
@@ -67,7 +68,8 @@
         "A user can delete their own review; deleting another user's review is refused (403 or 404) and the review remains",
         "The change follows the project's conventions: envelope responses, helpers from cmd/api/errors.go, a model in internal/data with value semantics and per-query timeouts, and routes registered in routes.go with the existing auth wrappers",
         "The README or docs/openapi.yaml documents the new review endpoints",
-        "Existing movie endpoints still work"
+        "Existing movie endpoints still work",
+        "New validation and parsing logic has table-driven tests that pass with go test"
       ]
     }
   ]

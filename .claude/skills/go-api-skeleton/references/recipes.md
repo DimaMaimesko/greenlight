@@ -1,8 +1,9 @@
 # Recipes
 
 Step-by-step checklists for common changes. Each step names the file to
-touch; the other references explain the rules for each layer. Finish every
-recipe with `make tidy` and `make audit`.
+touch; the other references explain the rules for each layer. Any recipe that
+adds or changes validation or parsing includes its table-driven tests
+(testing.md). Finish every recipe with `make tidy` and `make audit`.
 
 ## Add a resource (e.g. `reviews`)
 
@@ -20,22 +21,26 @@ recipe with `make tidy` and `make audit`.
      (version check), `Delete`, and `GetAll(..., filters Filters)` if it can be
      listed. Values in, values out; a 3-second timeout per query; driver errors
      translated to `ErrRecordNotFound` / `ErrEditConflict`.
-3. **Register** the model: add `Reviews ReviewModel` to `Models` and
+3. **Tests**: `internal/data/reviews_test.go` (testing.md)
+   - A table-driven `TestValidateReview`: the valid case, each rule on its
+     own, and both sides of every limit.
+   - A test for every parser or custom type the resource introduced.
+4. **Register** the model: add `Reviews ReviewModel` to `Models` and
    `Reviews: ReviewModel{DB: db}` to `NewModels` in `internal/data/models.go`.
-4. **Handlers**: `cmd/api/reviews.go` (handlers.md)
+5. **Handlers**: `cmd/api/reviews.go` (handlers.md)
    - `createReviewHandler` (201 + `Location`), `showReviewHandler`,
      `updateReviewHandler` (PATCH, pointer input fields, 409 on conflict),
      `deleteReviewHandler`, `listReviewsHandler` (filters + metadata).
-5. **Routes**: `cmd/api/routes.go`
+6. **Routes**: `cmd/api/routes.go`
    - `/v1/reviews` and `/v1/reviews/:id`, each wrapped in
      `app.requireActivatedUserWithPermission("reviews:read", ...)` or
      `"reviews:write"`.
-6. **Default permissions**: if new users should get `reviews:read`, add it to
+7. **Default permissions**: if new users should get `reviews:read`, add it to
    the `Permissions.AddForUser` call in `registerUserHandler`.
-7. **Docs**: add the endpoints to `docs/openapi.yaml` and the README, if the
+8. **Docs**: add the endpoints to `docs/openapi.yaml` and the README, if the
    project has them.
-8. **Check**: `make audit`, then exercise each endpoint with curl, including
-   the 404, 409 and 422 paths.
+9. **Check**: `make audit` (runs the tests), then exercise each endpoint with
+   curl, including the 404, 409 and 422 paths.
 
 A resource that belongs to a user (only the owner may edit it) adds a
 `user_id` foreign key, sets it from `app.contextGetAuthenticatedUser(r)` on
@@ -47,9 +52,11 @@ create, and filters or checks on it in the model's queries.
    `CHECK` if it has rules). Never edit the original migration.
 2. Add the field to the struct, `Validate<Resource>`, and every query's
    column list and `Scan` call in the model.
-3. Add it to the create handler's input struct, and as a pointer to the update
+3. Add cases for the new rules to the resource's validation test (and a test
+   for the field's type if it has its own parsing).
+4. Add it to the create handler's input struct, and as a pointer to the update
    handler's input struct.
-4. Add it to `SortSafelist` if it should be sortable.
+5. Add it to `SortSafelist` if it should be sortable.
 
 ## Add an error response
 

@@ -158,3 +158,5 @@ retries.
   correct no matter who writes it.
 - Programmer errors panic. `ValidateUser` panics if the password hash is nil,
   because that can only mean `Password.Set` was never called.
+- Every `Validate<Thing>` has a table-driven test next to it
+  (`<resource>_test.go`); see testing.md.

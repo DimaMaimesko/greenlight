@@ -93,6 +93,7 @@ are short and describe the rules the existing code already follows:
 | Users, passwords, tokens, activation, permissions, emails | `references/auth.md` |
 | Settings, environment variables, `.env`, logging, expvar | `references/config.md` |
 | Schema changes and migrations | `references/migrations.md` |
+| Tests for validation, parsers and custom types | `references/testing.md` |
 | A common change from start to finish | `references/recipes.md` |
 
 For anything that touches several layers (a new resource, a new field, a
@@ -143,23 +144,29 @@ These hold the style together. The references explain each in full.
   `.env.example`.
 - **Tokens are stored as SHA-256 hashes**, passwords as bcrypt hashes, and
   neither plaintext is ever stored or logged.
+- **New validation and parsing logic comes with table-driven tests**, written
+  by default rather than on request: that is where the edge cases are, and
+  the tests need no database, so `make audit` runs them every time.
 
 ## Checking your work
 
-Run these in the project before saying the work is done:
+Do these in the project before saying the work is done:
 
-1. `make tidy`, then `make audit` (vet, staticcheck, race tests). Both must
-   pass.
-2. If PostgreSQL is available: `make db/migrations/up`, and for new
+1. **Write table-driven tests** for every `Validate<Thing>`, parser and
+   custom JSON type you added or changed, in a `_test.go` file next to it,
+   with the standard `testing` package only. Cover the valid case and both
+   sides of every limit. Don't wait to be asked: the user wants them unless
+   they say otherwise. `references/testing.md` has the pattern. Tests that
+   need a database or a running server are a bigger step; offer those
+   instead of adding them unasked.
+2. `make tidy`, then `make audit` (vet, staticcheck, and the tests with the
+   race detector). Both must pass.
+3. If PostgreSQL is available: `make db/migrations/up`, and for new
    migrations also `make db/migrations/rollback` followed by `up` again, to
    prove the `down` file works.
-3. Start the API and exercise each new or changed endpoint with curl,
+4. Start the API and exercise each new or changed endpoint with curl,
    including the error paths: missing auth (401), missing permission (403),
    unknown id (404), invalid input (422), bad JSON (400).
-
-The template ships without Go tests. If the user wants them, use the
-standard `testing` package with `net/http/httptest` and table-driven cases;
-don't add a test framework.
 
 ## Maintaining this skill
 
