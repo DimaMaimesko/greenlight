@@ -31,7 +31,13 @@ func (app *application) serve() error {
 
 		app.logger.Info("stopping server", "addr", srv.Addr, "signal", s.String())
 
-		shutdownError <- srv.Shutdown(context.Background())
+		// Give in-flight requests up to 30 seconds to complete. Without a
+		// deadline, a single connection that never goes idle would block
+		// shutdown forever.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		shutdownError <- srv.Shutdown(ctx)
 	}()
 
 	app.logger.Info("starting server", "addr", srv.Addr, "env", app.config.env)

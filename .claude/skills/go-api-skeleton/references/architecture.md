@@ -106,15 +106,13 @@ the only function that exits the process.
   5s, `WriteTimeout` 10s) and routes its `ErrorLog` into slog with
   `slog.NewLogLogger(app.logger.Handler(), slog.LevelError)`.
 - A goroutine waits for SIGINT/SIGTERM, logs `stopping server`, calls
-  `srv.Shutdown` and sends the result on a channel.
+  `srv.Shutdown` with a 30-second deadline (without one, a single connection
+  that never goes idle blocks shutdown forever) and sends the result on a
+  channel.
 - `ListenAndServe` returns `http.ErrServerClosed` once shutdown starts; that is
   the normal path. Any other error is returned at once.
 - After `Shutdown` returns, `app.wg.Wait()` lets background tasks finish, then
   `shutdown complete` is logged.
-- **Known gap:** the reference project calls `srv.Shutdown(context.Background())`,
-  which has no deadline, so one stuck connection blocks shutdown forever. The
-  book uses `context.WithTimeout(context.Background(), 30*time.Second)`; prefer
-  that in new code.
 
 ## Naming
 
