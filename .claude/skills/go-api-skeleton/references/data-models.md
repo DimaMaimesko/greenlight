@@ -8,11 +8,12 @@ Each `internal/data/<resource>.go` holds three things:
 2. `Validate<Resource>(v *validator.Validator, x X)`: the business rules.
 3. `<Resource>Model struct { DB *sql.DB }` with the SQL methods.
 
-Register every model in `internal/data/models.go`:
+`internal/data/items.go` is the complete example to copy. Register every
+model in `internal/data/models.go`:
 
 ```go
 type Models struct {
-	Movies      MovieModel
+	Items       ItemModel
 	Users       UserModel
 	Tokens      TokenModel
 	Permissions PermissionModel
@@ -20,32 +21,30 @@ type Models struct {
 
 func NewModels(db *sql.DB) Models {
 	return Models{
-		Movies:      MovieModel{DB: db},
+		Items:       ItemModel{DB: db},
 		...
 	}
 }
 ```
 
-Handlers then call `app.models.Movies.Get(id)`.
+Handlers then call `app.models.Items.Get(id)`.
 
 ## Domain structs
 
 ```go
-type Movie struct {
-	ID        int       `json:"id"`
-	CreatedAt time.Time `json:"-"`
-	Title     string    `json:"title"`
-	Year      int       `json:"year,omitzero"`
-	Runtime   Runtime   `json:"runtime,omitzero"`
-	Genres    []string  `json:"genres,omitzero"`
-	Version   int       `json:"version"`
+type Item struct {
+	ID          int       `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitzero"`
+	Tags        []string  `json:"tags"`
+	Version     int       `json:"version"`
 }
 ```
 
 - Every field has an explicit snake_case JSON tag.
-- `json:"-"` hides internal or sensitive fields: `Movie.CreatedAt`,
-  `User.Password`, `User.Version`, and everything on `Token` except the
-  plaintext and expiry.
+- `json:"-"` hides internal or sensitive fields: `User.Password`,
+  `User.Version`, and everything on `Token` except the plaintext and expiry.
 - Optional fields use `omitzero` (Go 1.24+), not `omitempty`.
 - `ID int` maps to a `bigint` identity column.
 - Every table that can be updated has `Version int`, for optimistic locking.
@@ -56,17 +55,17 @@ This project differs from the book here: model methods take and return
 **values**, not pointers.
 
 ```go
-func (m MovieModel) Insert(movie Movie) (Movie, error)
-func (m MovieModel) Get(id int) (Movie, error)
-func (m MovieModel) Update(movie Movie) (Movie, error)
-func (m MovieModel) Delete(id int) error
-func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]Movie, Metadata, error)
+func (m ItemModel) Insert(item Item) (Item, error)
+func (m ItemModel) Get(id int) (Item, error)
+func (m ItemModel) Update(item Item) (Item, error)
+func (m ItemModel) Delete(id int) error
+func (m ItemModel) GetAll(name string, tags []string, filters Filters) ([]Item, Metadata, error)
 ```
 
 - `Insert` and `Update` scan database-generated values (`id`, `created_at`,
   `version`) into their copy and return it. Callers reassign:
-  `movie, err = app.models.Movies.Insert(movie)`.
-- On error, return the zero value (`Movie{}`), never a half-filled struct.
+  `item, err = app.models.Items.Insert(item)`.
+- On error, return the zero value (`Item{}`), never a half-filled struct.
 - Model types use value receivers.
 
 ## Query rules
@@ -84,9 +83,12 @@ func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]Mo
   values go in `args := []any{...}`.
 - Use `RETURNING` to get generated values back in the same round trip.
 - Postgres arrays: `pq.Array(x)` to write, `pq.Array(&x)` to scan.
-- Skip the query for impossible IDs: `if id < 1 { return Movie{}, ErrRecordNotFound }`.
+  `pq.Array` writes a nil slice as NULL, so for a `NOT NULL` array column
+  the model turns nil into `[]string{}` before writing (see
+  `ItemModel.Insert`).
+- Skip the query for impossible IDs: `if id < 1 { return Item{}, ErrRecordNotFound }`.
 - Lists: `defer rows.Close()`, check `rows.Err()` after the loop, and start
-  with `movies := []Movie{}` so an empty result encodes as `[]`, not `null`.
+  with `items := []Item{}` so an empty result encodes as `[]`, not `null`.
 
 ## Errors
 
@@ -108,9 +110,9 @@ Models never log.
 ## Optimistic locking
 
 ```sql
-UPDATE movies
-SET title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
-WHERE id = $5 AND version = $6
+UPDATE items
+SET name = $1, description = $2, tags = $3, version = version + 1
+WHERE id = $4 AND version = $5
 RETURNING version
 ```
 
@@ -118,7 +120,7 @@ No row back means someone changed the record after it was read, so the model
 returns `ErrEditConflict` and the handler sends 409. The client re-reads and
 retries.
 
-## Lists, filtering and pagination (`filters.go`, `MovieModel.GetAll`)
+## Lists, filtering and pagination (`filters.go`, `ItemModel.GetAll`)
 
 - `Filters{Page, PageSize, Sort, SortSafelist}`. `ValidateFilters` allows page
   1 to 10,000,000, page_size 1 to 100, and only safelisted sort values.
@@ -135,8 +137,8 @@ retries.
   parameter is empty:
 
   ```sql
-  WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
-  AND (genres @> $2 OR $2 = '{}')
+  WHERE (to_tsvector('simple', name) @@ plainto_tsquery('simple', $1) OR $1 = '')
+  AND (tags @> $2 OR $2 = '{}')
   ```
 
 ## Validation (`internal/validator`)

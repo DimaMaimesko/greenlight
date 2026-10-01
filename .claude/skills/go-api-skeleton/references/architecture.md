@@ -1,9 +1,10 @@
 # Architecture
 
 How a project in this style is laid out, and the rules that keep it that way.
-The style comes from Alex Edwards' *Let's Go Further*, as implemented in the
-reference project (greenlight, a movies API). File paths below are relative to
-the project root and exist in every project scaffolded by this skill.
+The style comes from Alex Edwards' *Let's Go Further*, as implemented in
+greenlight (a movies API) and generalised into this skill's `template/`. File
+paths below are relative to the project root and exist in every project
+scaffolded by this skill; `items` is the template's example resource.
 
 ## Layout
 
@@ -18,8 +19,7 @@ cmd/
     errors.go           logError, errorResponse, one named helper per error response
     context.go          request-context key and get/set helpers
     healthcheck.go      GET /v1/healthcheck
-    <resource>.go       handlers for one resource: movies.go, users.go, tokens.go
-  examples/             throwaway programs, e.g. cors/simple (a page to test CORS from a browser)
+    <resource>.go       handlers for one resource: items.go, users.go, tokens.go
 internal/
   data/                 domain structs, validation rules, SQL
     models.go           Models struct, NewModels(db), shared sentinel errors
@@ -118,18 +118,18 @@ the only function that exits the process.
 
 | Thing | Pattern | Examples |
 | --- | --- | --- |
-| Handler | `<verb><Resource>Handler` | `createMovieHandler`, `listMoviesHandler`, `activateUserHandler` |
+| Handler | `<verb><Resource>Handler` | `createItemHandler`, `listItemsHandler`, `activateUserHandler` |
 | Error response | `<situation>Response` | `notFoundResponse`, `editConflictResponse` |
-| Model | `<Resource>Model`, plural field in `Models` | `MovieModel`, `app.models.Movies` |
-| Validation | `Validate<Thing>(v, thing)` in `internal/data` | `ValidateMovie`, `ValidateEmail` |
+| Model | `<Resource>Model`, plural field in `Models` | `ItemModel`, `app.models.Items` |
+| Validation | `Validate<Thing>(v, thing)` in `internal/data` | `ValidateItem`, `ValidateEmail` |
 | Middleware | what it does | `recoverPanic`, `rateLimit`, `authenticate`, `enableCORS`, `metrics` |
-| Route | `/v1/` + plural noun; actions as sub-resources | `/v1/movies/:id`, `PUT /v1/users/activated`, `POST /v1/tokens/authentication` |
+| Route | `/v1/` + plural noun; actions as sub-resources | `/v1/items/:id`, `PUT /v1/users/activated`, `POST /v1/tokens/authentication` |
 
 ## Code style
 
 - Return early on errors. `err := f()` and `if err != nil` sit on separate
   lines; the one exception is the validator idiom
-  `if data.ValidateMovie(v, movie); !v.Valid() {`.
+  `if data.ValidateItem(v, item); !v.Valid() {`.
 - Map errors with `switch { case errors.Is(err, ...): ... default: ... }`,
   even when there is only one case, so adding another is a one-line change.
 - Comments are full sentences above the code. Match the density of the file

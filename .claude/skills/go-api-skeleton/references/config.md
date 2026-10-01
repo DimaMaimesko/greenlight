@@ -18,12 +18,12 @@ _ = godotenv.Load()
 
 var cfg config
 
-flag.IntVar(&cfg.port, "port", envInt("GREENLIGHT_PORT", 4000), "API server port")
-flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
+flag.IntVar(&cfg.port, "port", envInt("APP_PORT", 4000), "API server port")
+flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("APP_DB_DSN"), "PostgreSQL DSN")
 flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 flag.TextVar(&cfg.logLevel, "log-level", slog.LevelInfo, "Minimum log level (debug|info|warn|error)")
 
-cfg.cors.trustedOrigins = strings.Fields(os.Getenv("GREENLIGHT_CORS_TRUSTED_ORIGINS"))
+cfg.cors.trustedOrigins = strings.Fields(os.Getenv("APP_CORS_TRUSTED_ORIGINS"))
 flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
 	cfg.cors.trustedOrigins = strings.Fields(val)
 	return nil
@@ -36,7 +36,7 @@ flag.Parse()
   variable is unset or empty; `envInt` also falls back on a value that isn't
   a number.
 - Secrets get **no** default in code: `os.Getenv(...)` alone
-  (`GREENLIGHT_DB_DSN`, `GREENLIGHT_SMTP_USERNAME`, `GREENLIGHT_SMTP_PASSWORD`).
+  (`APP_DB_DSN`, `APP_SMTP_USERNAME`, `APP_SMTP_PASSWORD`).
 - Required settings are checked right after `flag.Parse()` and the program
   exits with a message saying exactly how to fix it.
 - Use the flag type that matches the value: `DurationVar` for durations,
@@ -72,8 +72,9 @@ environment variables anywhere else.
 
 ## Naming
 
-- Environment variables: `<APP>_<SECTION>_<NAME>`, e.g. `GREENLIGHT_DB_DSN`,
-  `GREENLIGHT_SMTP_HOST`. A scaffolded project uses its own prefix.
+- Environment variables: `<PREFIX>_<SECTION>_<NAME>`, e.g. `APP_DB_DSN`,
+  `APP_SMTP_HOST`. The template's `APP_` prefix is replaced by the project's
+  own when it is scaffolded (greenlight uses `GREENLIGHT_`).
 - Flags: kebab-case, prefixed by section: `-db-max-open-conns`,
   `-limiter-rps`, `-cors-trusted-origins`.
 - Environments: `development`, `staging`, `production` via `-env`.

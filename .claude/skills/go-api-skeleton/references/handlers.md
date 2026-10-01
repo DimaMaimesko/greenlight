@@ -6,16 +6,15 @@ writing a handler: they are short and every handler uses them.
 ## Handler anatomy
 
 Every handler that takes a body follows the same steps. From
-`createMovieHandler` in `cmd/api/movies.go`:
+`createItemHandler` in `cmd/api/items.go`:
 
 ```go
-func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) createItemHandler(w http.ResponseWriter, r *http.Request) {
 	// 1. An anonymous input struct holding only the fields a client may send.
 	var input struct {
-		Title   string       `json:"title"`
-		Year    int          `json:"year"`
-		Runtime data.Runtime `json:"runtime"`
-		Genres  []string     `json:"genres"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
 	}
 
 	// 2. Decode. Any error here is the client's fault: 400.
@@ -27,23 +26,22 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 
 	// 3. Copy into the domain struct. Never decode straight into it, or
 	//    clients could set ID, Version or CreatedAt.
-	movie := data.Movie{
-		Title:   input.Title,
-		Year:    input.Year,
-		Runtime: input.Runtime,
-		Genres:  input.Genres,
+	item := data.Item{
+		Name:        input.Name,
+		Description: input.Description,
+		Tags:        input.Tags,
 	}
 
 	// 4. Validate: 422 with a field -> message map.
 	v := validator.New()
 
-	if data.ValidateMovie(v, movie); !v.Valid() {
+	if data.ValidateItem(v, item); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
 	// 5. Call the model. Map known errors; anything else is a 500.
-	movie, err = app.models.Movies.Insert(movie)
+	item, err = app.models.Items.Insert(item)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -51,9 +49,9 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 
 	// 6. Respond inside an envelope.
 	headers := make(http.Header)
-	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", movie.ID))
+	headers.Set("Location", fmt.Sprintf("/v1/items/%d", item.ID))
 
-	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": movie}, headers)
+	err = app.writeJSON(w, http.StatusCreated, envelope{"item": item}, headers)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
@@ -68,8 +66,8 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 
 | Situation | Status | Example |
 | --- | --- | --- |
-| Read, update or delete succeeded | 200 | `showMovieHandler`, `updateMovieHandler`, `deleteMovieHandler` |
-| Created | 201, plus `Location` when the resource has a URL | `createMovieHandler`, `createAuthenticationTokenHandler` |
+| Read, update or delete succeeded | 200 | `showItemHandler`, `updateItemHandler`, `deleteItemHandler` |
+| Created | 201, plus `Location` when the resource has a URL | `createItemHandler`, `createAuthenticationTokenHandler` |
 | Accepted, work continues in the background | 202 | `registerUserHandler` (welcome email) |
 | Malformed body or query | 400 | `badRequestResponse` |
 | No, invalid or expired credentials | 401 | `authenticationRequiredResponse`, `invalidCredentialsResponse`, `invalidAuthenticationTokenResponse` |
@@ -81,12 +79,12 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 | Rate limited | 429 | `rateLimitExceededResponse` |
 | Anything unexpected | 500 | `serverErrorResponse` |
 
-A delete returns 200 with `envelope{"message": "movie successfully deleted"}`.
+A delete returns 200 with `envelope{"message": "item successfully deleted"}`.
 
 ## The envelope and `writeJSON` (`cmd/api/helpers.go`)
 
 - `type envelope map[string]any`. Every response is an object with a named
-  top-level key: `{"movie": ...}`, `{"movies": [...], "metadata": {...}}`,
+  top-level key: `{"item": ...}`, `{"items": [...], "metadata": {...}}`,
   `{"error": ...}`. Never a bare array or value; the key makes responses
   self-describing and leaves room to add fields.
 - `writeJSON(w, status, data envelope, headers http.Header) error` marshals
@@ -108,15 +106,15 @@ A delete returns 200 with `envelope{"message": "movie successfully deleted"}`.
 - A second `Decode` must return `io.EOF`, so the body holds exactly one JSON
   value.
 - Errors from a custom `UnmarshalJSON` come through unchanged, so the client
-  gets e.g. 400 `invalid runtime format`.
+  gets that error's message with a 400 (see Custom JSON types below).
 
-## Partial updates (`updateMovieHandler`)
+## Partial updates (`updateItemHandler`)
 
 1. `readIDParam`; on error, `notFoundResponse`.
 2. Fetch the current record; `ErrRecordNotFound` → 404.
-3. Decode into an input struct with **pointer fields** (`*string`, `*int`,
-   `*data.Runtime`), so a missing key (nil) differs from a zero value. Slices
-   and maps are already nil when missing.
+3. Decode into an input struct with **pointer fields** (`*string`, `*int`),
+   so a missing key (nil) differs from a zero value. Slices and maps are
+   already nil when missing; a client clears `tags` by sending `[]`.
 4. Copy only non-nil fields onto the record.
 5. Validate the whole merged record.
 6. `Update`; `ErrEditConflict` → 409.
@@ -130,7 +128,7 @@ actions such as `PUT /v1/users/activated`.
 and rejects anything that isn't an integer ≥ 1. Handlers answer 404, not 400:
 an ID that can't exist is just a resource that doesn't exist.
 
-## Query strings (`listMoviesHandler`)
+## Query strings (`listItemsHandler`)
 
 - `qs := r.URL.Query()`, then `readString(qs, key, default)`,
   `readCSV(qs, key, default)` and `readInt(qs, key, default, v)`. `readInt`
@@ -138,9 +136,10 @@ an ID that can't exist is just a resource that doesn't exist.
   every bad parameter is reported at once.
 - The input struct embeds `data.Filters`. Set the defaults (page 1, page_size
   20, sort `id`) and a `SortSafelist` that lists each sortable column and its
-  `-` (descending) form.
+  `-` (descending) form: `id`, `name`, `created_at`, `-id`, `-name`,
+  `-created_at`.
 - `data.ValidateFilters(v, input.Filters)` → 422 on failure.
-- Respond with `envelope{"movies": movies, "metadata": metadata}`.
+- Respond with `envelope{"items": items, "metadata": metadata}`.
 
 ## Error responses (`cmd/api/errors.go`)
 
@@ -158,7 +157,7 @@ an ID that can't exist is just a resource that doesn't exist.
 ## Mapping model errors
 
 ```go
-movie, err := app.models.Movies.Get(id)
+item, err := app.models.Items.Get(id)
 if err != nil {
 	switch {
 	case errors.Is(err, data.ErrRecordNotFound):
@@ -191,5 +190,37 @@ Example: the welcome email in `registerUserHandler`.
 
 To control how a field looks in JSON, give it its own type in `internal/data`
 with `MarshalJSON` (value receiver) and `UnmarshalJSON` (pointer receiver).
-`data.Runtime` writes `134` as `"134 mins"`, accepts only that format and
-returns `ErrInvalidRuntimeFormat` otherwise.
+The book's example stores a runtime as minutes and shows it as `"134 mins"`:
+
+```go
+type Runtime int
+
+var ErrInvalidRuntimeFormat = errors.New("invalid runtime format")
+
+func (r Runtime) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Quote(fmt.Sprintf("%d mins", r))), nil
+}
+
+func (r *Runtime) UnmarshalJSON(jsonValue []byte) error {
+	unquoted, err := strconv.Unquote(string(jsonValue))
+	if err != nil {
+		return ErrInvalidRuntimeFormat
+	}
+
+	parts := strings.Split(unquoted, " ")
+	if len(parts) != 2 || parts[1] != "mins" {
+		return ErrInvalidRuntimeFormat
+	}
+
+	i, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return ErrInvalidRuntimeFormat
+	}
+
+	*r = Runtime(i)
+	return nil
+}
+```
+
+A field of this type rejects `"134 minutes"` with 400 `invalid runtime format`.
+In an update input struct use a pointer to it (`*data.Runtime`).

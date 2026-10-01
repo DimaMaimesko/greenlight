@@ -11,8 +11,8 @@ so a token is revoked by deleting it and there are no signing keys to manage.
 - `tokens`: `hash bytea PRIMARY KEY`, `user_id` (deleted with the user),
   `expiry`, `scope`.
 - `permissions` (`id`, `code`) and `users_permissions` (`user_id`,
-  `permission_id`), seeded by the migration with codes such as `movies:read`
-  and `movies:write`.
+  `permission_id`). Each resource's migrations insert its codes, such as
+  `items:read` and `items:write`.
 
 ## Passwords (`internal/data/users.go`)
 
@@ -53,7 +53,7 @@ type password struct {
 1. Decode name, email and password; build a `User` with `Activated: false`.
 2. `user.Password.Set(input.Password)`, then `ValidateUser`.
 3. `Users.Insert`; `ErrDuplicateEmail` becomes a 422 on the `email` field.
-4. `Permissions.AddForUser(user.ID, "movies:read")`: the default grants.
+4. `Permissions.AddForUser(user.ID, "items:read")`: the default grants.
 5. `Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)`.
 6. Send the welcome email with the token in `app.background`.
 7. 202 Accepted with the user.

@@ -14,8 +14,8 @@ func (app *application) routes() http.Handler {
 
 	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)
 
-	router.HandlerFunc(http.MethodGet, "/v1/movies", app.requireActivatedUserWithPermission("movies:read", app.listMoviesHandler))
-	router.HandlerFunc(http.MethodPost, "/v1/movies", app.requireActivatedUserWithPermission("movies:write", app.createMovieHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/items", app.requireActivatedUserWithPermission("items:read", app.listItemsHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/items", app.requireActivatedUserWithPermission("items:write", app.createItemHandler))
 	// ...
 
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
@@ -105,8 +105,9 @@ work must go through `app.background()`.
   `Access-Control-Allow-Headers` (`Authorization, Content-Type`), write 200
   and return without calling `next`.
 - Logs `cors request` at debug level only.
-- `cmd/examples/cors/simple` serves a page on `:9000` that calls the API, for
-  testing CORS from a real browser.
+- To test from a real browser, serve a page from another origin (for
+  example a tiny Go server on `:9000`) that calls the API with `fetch`, and
+  pass that origin to `-cors-trusted-origins`.
 
 ## `metrics`
 
